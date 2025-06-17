@@ -25,8 +25,9 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-camera.layers.enable(0);
-camera.layers.enable(1);
+camera.layers.enable(0); 
+camera.layers.enable(1); 
+camera.layers.enable(2); 
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -40,7 +41,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enabled = false;
+controls.enabled = true; 
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
 controls.minDistance = 10;
@@ -70,7 +71,7 @@ let purchaseOverlay = null;
 const domElements = {
   navLeftButton: document.getElementById("nav-left"),
   navRightButton: document.getElementById("nav-right"),
-  toggleOrbitButton: document.getElementById("toggle-orbit"),
+
   toggleTextosButton: document.getElementById("toggle-textos"),
   volverButton: document.getElementById("volver-menu"),
   specificationsListElement: document.getElementById("specifications-list"),
@@ -288,6 +289,44 @@ gltfLoader.load(
     modeloActual = gltf.scene;
     scene.add(modeloActual);
 
+   
+    modeloActual.traverse((object) => {
+      if (object.isMesh && object.material) {
+       
+        object.layers.set(0);
+
+        
+        if (Array.isArray(object.material)) {
+          object.material.forEach((material) => {
+            if (material.transparent) {
+              material.depthWrite = true; 
+              material.side = THREE.DoubleSide; 
+            }
+          });
+        } else { 
+          if (object.material.transparent) {
+            object.material.depthWrite = true;
+            object.material.side = THREE.DoubleSide; 
+          }
+        }
+      }
+    });
+
+    
+    const pared1 = modeloActual.getObjectByName("pared1");
+    if (pared1) {
+        pared1.layers.set(2);
+        
+        if (pared1.isMesh && pared1.material) {
+            if (Array.isArray(pared1.material)) {
+                pared1.material.forEach(mat => mat.depthWrite = false);
+            } else {
+                pared1.material.depthWrite = false;
+            }
+        }
+    }
+
+
     mixer = new THREE.AnimationMixer(modeloActual);
 
     gltf.animations.forEach((clip) => {
@@ -303,10 +342,6 @@ gltfLoader.load(
     } else {
       modeloActual.position.set(0, 0, 0);
     }
-
-    modeloActual.traverse((object) => {
-      object.layers.set(0);
-    });
 
     if (
       modeloSeleccionado.initialHiddenObjects &&
@@ -416,10 +451,12 @@ function animate() {
       );
 
       if (modeloActual) {
-        camera.layers.set(0);
+       
+        camera.layers.set(0); 
         let objetosParaRaycast = [];
         modeloActual.traverse((obj) => {
-          if (obj.isMesh && obj.name !== "pared1") {
+         
+          if (obj.isMesh && obj.layers.test(camera.layers)) { 
             objetosParaRaycast.push(obj);
           }
         });
@@ -435,6 +472,7 @@ function animate() {
       }
     }
   });
+
   if (modeloActual) {
     const localCamPos = modeloActual.worldToLocal(camera.position.clone());
     const camEnFrente = localCamPos.z < 0;
@@ -443,23 +481,46 @@ function animate() {
 
     if (pared && pared.isMesh && pared.material) {
       if (!pared.userData.materialClonado) {
-        pared.material = pared.material.clone();
+        
+        if (Array.isArray(pared.material)) {
+            pared.material = pared.material.map(mat => mat.clone());
+        } else {
+            pared.material = pared.material.clone();
+        }
         pared.userData.materialClonado = true;
       }
-
-      pared.material.transparent = true;
+      
+    
+      if (Array.isArray(pared.material)) {
+          pared.material.forEach(mat => mat.transparent = true);
+          pared.material.forEach(mat => mat.depthWrite = false);
+      } else {
+          pared.material.transparent = true;
+          pared.material.depthWrite = false;
+      }
 
       const opacidadObjetivo = camEnFrente ? 0.0 : 1.0;
-      pared.material.opacity +=
-        (opacidadObjetivo - pared.material.opacity) * 0.1;
+      if (Array.isArray(pared.material)) {
+          pared.material.forEach(mat => {
+              mat.opacity += (opacidadObjetivo - mat.opacity) * 0.1;
+          });
+      } else {
+          pared.material.opacity += (opacidadObjetivo - pared.material.opacity) * 0.1;
+      }
     }
   }
 
-  
+
   camera.layers.set(0); 
   renderer.render(scene, camera);
-  camera.layers.set(1); 
+
+  
+  camera.layers.set(2); 
   renderer.autoClear = false; 
+  renderer.render(scene, camera);
+
+ 
+  camera.layers.set(1); 
   renderer.render(scene, camera);
   renderer.autoClear = true; 
 }
@@ -513,19 +574,6 @@ window.addEventListener("orientationchange", () => {
     updateCameraPosition(); 
   }, 300); 
 });
-
-
-
-if (domElements.toggleOrbitButton) {
-  domElements.toggleOrbitButton.addEventListener("click", () => {
-    controls.enabled = !controls.enabled;
-    domElements.toggleOrbitButton.classList.toggle(
-      "button-active",
-      controls.enabled
-    );
-  });
-}
-
 
 if (domElements.toggleTextosButton) {
   domElements.toggleTextosButton.addEventListener("click", () => {
